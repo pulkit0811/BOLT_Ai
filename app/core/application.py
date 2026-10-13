@@ -20,6 +20,7 @@ class BoltApplication:
         configured_path = database_path or os.getenv("BOLT_DATABASE_PATH") or AppConfig.default_database_path()
         self.database = Database(configured_path)
         self.config = self._load_config()
+        self.voice_draft: str | None = None
         if provider is not None:
             self.provider = provider
         else:
@@ -65,6 +66,12 @@ class BoltApplication:
         )
         self.config = config
         self.provider = provider
+
+    def set_voice_draft(self, content: str) -> None:
+        self.voice_draft = content.strip() or None
+
+    def clear_voice_draft(self) -> None:
+        self.voice_draft = None
 
     def close(self) -> None:
         self.database.close()

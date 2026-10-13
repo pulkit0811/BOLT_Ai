@@ -110,7 +110,7 @@ class DesktopLauncher(QObject):
         self._start_frontend()
         self.tray.show()
         self.voice.start()
-        if os.getenv("BOLT_OPEN_BROWSER", "1") != "0":
+        if os.getenv("BOLT_OPEN_BROWSER", "0") != "0":
             QTimer.singleShot(1300, self.open_workspace)
 
     def open_workspace(self) -> None:
@@ -182,7 +182,7 @@ class DesktopLauncher(QObject):
         try:
             body = json.dumps({"content": transcript}).encode("utf-8")
             request = Request(
-                "http://127.0.0.1:8765/api/voice-input",
+                "http://127.0.0.1:8765/api/voice-draft",
                 data=body,
                 headers={"Content-Type": "application/json"},
                 method="POST",
@@ -195,9 +195,9 @@ class DesktopLauncher(QObject):
 
     def _voice_finished(self, succeeded: bool, message: str) -> None:
         if succeeded:
-            self.overlay.show_message("Bolt received your question")
+            self.overlay.show_message("Opening Bolt with your question")
             self.open_workspace()
-            QTimer.singleShot(1200, self.overlay.hide_overlay)
+            QTimer.singleShot(1800, self.overlay.hide_overlay)
         else:
             self._voice_error(message)
 

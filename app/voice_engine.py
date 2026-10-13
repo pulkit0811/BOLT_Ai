@@ -31,7 +31,17 @@ class VoiceEngine(QObject):
         default_path = project_root / "models" / "vosk-model-small-en-us-0.15"
         self.model_path = Path(model_path or os.getenv("BOLT_VOICE_MODEL", default_path))
         self.wake_word = wake_word.lower()
-        self.wake_phrases = (self.wake_word, f"hey {self.wake_word}", f"ok {self.wake_word}")
+        self.wake_phrases = (
+            f"hey {self.wake_word}",
+            f"ok {self.wake_word}",
+            self.wake_word,
+            "hey volt",
+            "ok volt",
+            "volt",
+            "hey bold",
+            "ok bold",
+            "bold",
+        )
         self._audio_queue: queue.Queue[bytes] = queue.Queue(maxsize=24)
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None

@@ -58,6 +58,15 @@ class BoltRequestHandler(BaseHTTPRequestHandler):
             self.application.active_conversation = conversation
             self._respond(200, self._conversation(conversation))
             return
+        if path == "/api/voice-draft":
+            payload = self._read_json()
+            content = str(payload.get("content", "")).strip() if isinstance(payload, Mapping) else ""
+            if not content:
+                self._respond(400, {"error": "Voice input is required"})
+                return
+            self.application.set_voice_draft(content)
+            self._respond(200, {"ok": True, "content": content})
+            return
         if path == "/api/voice-input":
             payload = self._read_json()
             content = str(payload.get("content", "")).strip() if isinstance(payload, Mapping) else ""
@@ -96,6 +105,7 @@ class BoltRequestHandler(BaseHTTPRequestHandler):
 
     def _answer(self, conversation: Conversation, content: str) -> dict[str, object]:
         self.application.active_conversation = conversation
+        self.application.clear_voice_draft()
         if not conversation.messages:
             conversation.title = content[:42] + ("..." if len(content) > 42 else "")
         conversation.messages.append(Message(role="user", content=content))
@@ -111,6 +121,7 @@ class BoltRequestHandler(BaseHTTPRequestHandler):
         return {
             "conversations": [self._conversation(item) for item in self.application.conversations],
             "activeId": self.application.active_conversation.id,
+            "voiceDraft": self.application.voice_draft,
             "engine": {
                 "provider": config.provider,
                 "model": config.model,

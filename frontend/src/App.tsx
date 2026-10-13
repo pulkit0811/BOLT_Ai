@@ -37,6 +37,13 @@ type Engine = {
   isCloud: boolean
 }
 
+type WorkspaceState = {
+  conversations: Conversation[]
+  engine: Engine
+  activeId: string
+  voiceDraft?: string | null
+}
+
 const starterConversations: Conversation[] = [
   { id: "launch", title: "Quarterly launch strategy", messages: [] },
   { id: "architecture", title: "React architecture review", messages: [] },
@@ -64,6 +71,7 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
   const composerRef = useRef<HTMLTextAreaElement>(null)
+  const lastVoiceDraft = useRef<string | null>(null)
 
   const activeConversation = conversations.find((conversation) => conversation.id === activeId) ?? conversations[0]
   const visibleConversations = useMemo(
@@ -82,10 +90,15 @@ function App() {
       try {
         const response = await fetch(apiPath("/api/state"))
         if (!response.ok) return
-        const state = (await response.json()) as { conversations: Conversation[]; engine: Engine; activeId: string }
+        const state = (await response.json()) as WorkspaceState
         if (state.conversations.length) setConversations(state.conversations)
         if (state.activeId) setActiveId(state.activeId)
         setEngine(state.engine)
+        if (state.voiceDraft && state.voiceDraft !== lastVoiceDraft.current) {
+          lastVoiceDraft.current = state.voiceDraft
+          setDraft(state.voiceDraft)
+          window.setTimeout(() => composerRef.current?.focus(), 80)
+        }
       } catch {
         return
       }
