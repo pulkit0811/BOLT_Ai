@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import sys
 import threading
 import webbrowser
@@ -11,13 +12,29 @@ from pathlib import Path
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-from PySide6.QtCore import QEvent, QObject, QPoint, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QLockFile, QObject, QPoint, Qt, QTimer, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QLinearGradient, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
 
 from app.core.application import BoltApplication
 from app.voice_engine import VoiceEngine
 from app.web_server import create_server
+
+VOICE_SITES = {
+    "youtube": "https://www.youtube.com",
+    "youtube.com": "https://www.youtube.com",
+    "google": "https://www.google.com",
+    "google.com": "https://www.google.com",
+    "gmail": "https://mail.google.com",
+    "github": "https://github.com",
+    "github.com": "https://github.com",
+    "linkedin": "https://www.linkedin.com",
+    "linkedin.com": "https://www.linkedin.com",
+    "chatgpt": "https://chatgpt.com",
+    "chatgpt.com": "https://chatgpt.com",
+    "whatsapp": "https://web.whatsapp.com",
+    "web.whatsapp.com": "https://web.whatsapp.com",
+}
 
 
 class GlowOverlay(QWidget):
@@ -172,11 +189,14 @@ class DesktopLauncher(QObject):
         self.tray.setToolTip(f"Bolt AI · {status}")
 
     def _voice_error(self, message: str) -> None:
-        self.voice_action.setChecked(False)
         self.overlay.show_message(message[:72])
-        QTimer.singleShot(4000, self.overlay.hide_overlay)
+        QTimer.singleShot(2500, self.overlay.hide_overlay)
 
     def _send_voice_transcript(self, transcript: str) -> None:
+        if self._open_voice_site(transcript):
+            self.overlay.hide_overlay()
+            return
+        self.open_workspace()
         thread = threading.Thread(target=self._post_voice_transcript, args=(transcript,), daemon=True)
         thread.start()
 
@@ -184,7 +204,7 @@ class DesktopLauncher(QObject):
         try:
             body = json.dumps({"content": transcript}).encode("utf-8")
             request = Request(
-                "http://127.0.0.1:8765/api/voice-draft",
+                "http://127.0.0.1:8765/api/voice-input",
                 data=body,
                 headers={"Content-Type": "application/json"},
                 method="POST",
@@ -197,11 +217,22 @@ class DesktopLauncher(QObject):
 
     def _voice_finished(self, succeeded: bool, message: str) -> None:
         if succeeded:
-            self.overlay.show_message("Opening Bolt with your question")
-            self.open_workspace()
-            QTimer.singleShot(1800, self.overlay.hide_overlay)
+            QTimer.singleShot(700, self.overlay.hide_overlay)
         else:
             self._voice_error(message)
+
+    def _open_voice_site(self, transcript: str) -> bool:
+        phrase = " ".join(transcript.lower().split()).strip().rstrip(".")
+        for prefix in ("open ", "launch ", "go to "):
+            if not phrase.startswith(prefix):
+                continue
+            target = phrase.removeprefix(prefix).removesuffix(" please").strip()
+            url = VOICE_SITES.get(target)
+            if url is None:
+                return False
+            webbrowser.open(url)
+            return True
+        return False
 
     def _start_frontend(self) -> None:
         distribution = self.frontend_root / "dist"
@@ -225,12 +256,22 @@ class DesktopLauncher(QObject):
 
 
 def main() -> int:
+    lock_path = Path(os.getenv("TEMP", str(Path.home()))) / "bolt-ai-launcher.lock"
+    instance_lock = QLockFile(str(lock_path))
+    instance_lock.setStaleLockTime(10000)
+    if not instance_lock.tryLock(100):
+        return 0
     qt_app = QApplication(sys.argv)
     qt_app.setApplicationName("Bolt AI")
     qt_app.setQuitOnLastWindowClosed(False)
-    launcher = DesktopLauncher(qt_app)
-    launcher.start()
-    return qt_app.exec()
+    signal.signal(signal.SIGINT, lambda signum, frame: qt_app.quit())
+    signal.signal(signal.SIGTERM, lambda signum, frame: qt_app.quit())
+    try:
+        launcher = DesktopLauncher(qt_app)
+        launcher.start()
+        return qt_app.exec()
+    finally:
+        instance_lock.unlock()
 
 
 if __name__ == "__main__":
