@@ -31,6 +31,7 @@ class VoiceEngine(QObject):
         default_path = project_root / "models" / "vosk-model-small-en-us-0.15"
         self.model_path = Path(model_path or os.getenv("BOLT_VOICE_MODEL", default_path))
         self.wake_word = wake_word.lower()
+        self.wake_phrases = (self.wake_word, f"hey {self.wake_word}", f"ok {self.wake_word}")
         self._audio_queue: queue.Queue[bytes] = queue.Queue(maxsize=24)
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
@@ -63,24 +64,23 @@ class VoiceEngine(QObject):
             self._clear_audio_queue()
             last_error: Exception | None = None
             for device in self._device_candidates():
-                if self._stop_event.is_set():
-                    return
-                try:
-                    stream_options = {
-                        "device": device,
-                        "blocksize": 4000,
-                        "dtype": "int16",
-                        "channels": 1,
-                        "callback": self._audio_callback,
-                    }
-                    sample_rate = self._device_sample_rate(device)
-                    if sample_rate:
-                        stream_options["samplerate"] = sample_rate
-                    with sounddevice.RawInputStream(**stream_options) as stream:
-                        self._listen(model, stream)
-                    return
-                except Exception as exc:
-                    last_error = exc
+                for sample_rate in self._sample_rates(device):
+                    if self._stop_event.is_set():
+                        return
+                    try:
+                        stream_options = {
+                            "device": device,
+                            "samplerate": sample_rate,
+                            "blocksize": 1600,
+                            "dtype": "int16",
+                            "channels": 1,
+                            "callback": self._audio_callback,
+                        }
+                        with sounddevice.RawInputStream(**stream_options) as stream:
+                            self._listen(model, stream)
+                        return
+                    except Exception as exc:
+                        last_error = exc
             if last_error is not None:
                 raise last_error
         except Exception as exc:
@@ -133,8 +133,16 @@ class VoiceEngine(QObject):
         except Exception:
             return None
 
+    def _sample_rates(self, device: int | str | None) -> list[float]:
+        native_rate = self._device_sample_rate(device)
+        rates = [16000.0]
+        if native_rate and native_rate not in rates:
+            rates.append(native_rate)
+        return rates
+
     def _listen(self, model: object, stream: object) -> None:
-        recognizer = KaldiRecognizer(model, stream.samplerate)
+        grammar = json.dumps([*self.wake_phrases, "[unk]"])
+        recognizer = KaldiRecognizer(model, stream.samplerate, grammar)
         active = False
         phrase_parts: list[str] = []
         last_speech = 0.0
@@ -147,7 +155,7 @@ class VoiceEngine(QObject):
                     self._finish_phrase(phrase_parts)
                     active = False
                     phrase_parts = []
-                    recognizer = KaldiRecognizer(model, stream.samplerate)
+                    recognizer = KaldiRecognizer(model, stream.samplerate, grammar)
                 continue
             accepted = recognizer.AcceptWaveform(data)
             result = json.loads(recognizer.Result() if accepted else recognizer.PartialResult())
@@ -157,13 +165,14 @@ class VoiceEngine(QObject):
                     self._finish_phrase(phrase_parts)
                     active = False
                     phrase_parts = []
-                    recognizer = KaldiRecognizer(model, stream.samplerate)
+                    recognizer = KaldiRecognizer(model, stream.samplerate, grammar)
                 continue
             last_speech = time.monotonic()
             if not active:
-                if self.wake_word not in text:
+                matched_phrase = next((phrase for phrase in self.wake_phrases if phrase in text), None)
+                if matched_phrase is None:
                     continue
-                phrase = text.split(self.wake_word, 1)[1].strip()
+                phrase = text.split(matched_phrase, 1)[1].strip()
                 active = True
                 phrase_parts = [phrase] if phrase else []
                 self.listening_changed.emit(True, "Listening")
@@ -176,7 +185,7 @@ class VoiceEngine(QObject):
                 self._finish_phrase(phrase_parts)
                 active = False
                 phrase_parts = []
-                recognizer = KaldiRecognizer(model, stream.samplerate)
+                recognizer = KaldiRecognizer(model, stream.samplerate, grammar)
 
     def _audio_callback(self, indata: object, frames: int, timing: object, status: object) -> None:
         del frames, timing, status
