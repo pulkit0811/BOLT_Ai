@@ -156,28 +156,31 @@ class VoiceEngine(QObject):
         active = False
         phrase_parts: list[str] = []
         last_speech = 0.0
+        last_text = ""
         self.status_changed.emit("Say Bolt to wake me")
         while not self._stop_event.is_set():
             try:
                 data = self._audio_queue.get(timeout=0.2)
             except queue.Empty:
-                if active and phrase_parts and time.monotonic() - last_speech > 1.25:
+                if active and time.monotonic() - last_speech > 1.25:
+                    final_result = json.loads(recognizer.FinalResult())
+                    final_text = str(final_result.get("text", "")).strip().lower()
+                    if final_text:
+                        phrase_parts.append(final_text)
                     self._finish_phrase(phrase_parts)
                     active = False
                     phrase_parts = []
+                    last_text = ""
                     recognizer = KaldiRecognizer(model, stream.samplerate, grammar)
                 continue
             accepted = recognizer.AcceptWaveform(data)
             result = json.loads(recognizer.Result() if accepted else recognizer.PartialResult())
             text = str(result.get("text" if accepted else "partial", "")).strip().lower()
             if not text:
-                if active and phrase_parts and time.monotonic() - last_speech > 1.25:
-                    self._finish_phrase(phrase_parts)
-                    active = False
-                    phrase_parts = []
-                    recognizer = KaldiRecognizer(model, stream.samplerate, grammar)
                 continue
-            last_speech = time.monotonic()
+            if text != last_text:
+                last_speech = time.monotonic()
+                last_text = text
             if not active:
                 matched_phrase = next((phrase for phrase in self.wake_phrases if phrase in text), None)
                 if matched_phrase is None:
@@ -185,17 +188,14 @@ class VoiceEngine(QObject):
                 phrase = text.split(matched_phrase, 1)[1].strip()
                 active = True
                 phrase_parts = [phrase] if phrase else []
+                last_speech = time.monotonic()
+                last_text = ""
                 self.listening_changed.emit(True, "Listening")
                 self.status_changed.emit("Listening for your question")
                 recognizer = KaldiRecognizer(model, stream.samplerate)
                 continue
             if accepted:
                 phrase_parts.append(text)
-            if time.monotonic() - last_speech > 1.25 and phrase_parts:
-                self._finish_phrase(phrase_parts)
-                active = False
-                phrase_parts = []
-                recognizer = KaldiRecognizer(model, stream.samplerate, grammar)
 
     def _audio_callback(self, indata: object, frames: int, timing: object, status: object) -> None:
         del frames, timing, status
@@ -209,3 +209,5 @@ class VoiceEngine(QObject):
         if phrase:
             self.listening_changed.emit(False, "Sending")
             self.transcript_ready.emit(phrase)
+        else:
+            self.listening_changed.emit(False, "Standby")

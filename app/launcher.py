@@ -12,7 +12,7 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 from PySide6.QtCore import QEvent, QObject, QPoint, QRect, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
+from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QLinearGradient, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
 
 from app.core.application import BoltApplication
@@ -26,14 +26,14 @@ class GlowOverlay(QWidget):
     def __init__(self) -> None:
         super().__init__(None, Qt.FramelessWindowHint | Qt.Tool | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setFixedSize(520, 54)
+        self.setFixedHeight(54)
         self._phase = 0
         self._message = "Listening for Bolt"
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._animate)
 
     def show_listening(self) -> None:
-        self._message = "Listening for Bolt"
+        self._message = "Listening for your question"
         self._position()
         self._timer.start(40)
         self.show()
@@ -57,12 +57,18 @@ class GlowOverlay(QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
         pulse = (self._phase % 100) / 100
         glow = int(78 + 70 * abs(0.5 - pulse) * 2)
-        for width, alpha in ((18, glow // 3), (11, glow // 2), (5, 255)):
-            painter.setPen(QColor(240, 82, 85, alpha))
-            painter.drawRoundedRect(QRect(36, 39 - width // 2, 448, width), width // 2, width // 2)
+        gradient = QLinearGradient(0, 0, self.width(), 0)
+        gradient.setColorAt(0.0, QColor("#ff4d6d"))
+        gradient.setColorAt(0.5, QColor("#ffb36b"))
+        gradient.setColorAt(1.0, QColor("#ff4d6d"))
+        for width, alpha in ((16, glow // 3), (8, glow // 2)):
+            painter.setPen(QPen(QColor(255, 78, 104, alpha), width))
+            painter.drawLine(0, 40, self.width(), 40)
+        painter.setPen(QPen(QBrush(gradient), 2))
+        painter.drawLine(0, 40, self.width(), 40)
         painter.setPen(QColor(235, 232, 226, 220))
         painter.setFont(QFont("Segoe UI", 9, QFont.Medium))
-        painter.drawText(QRect(0, 5, 520, 24), Qt.AlignCenter, self._message)
+        painter.drawText(QRect(0, 5, self.width(), 24), Qt.AlignCenter, self._message)
 
     def _animate(self) -> None:
         self._phase = (self._phase + 1) % 100
@@ -73,7 +79,8 @@ class GlowOverlay(QWidget):
         if screen is None:
             return
         area = screen.availableGeometry()
-        self.move(QPoint(area.center().x() - self.width() // 2, area.bottom() - self.height() - 18))
+        self.setFixedWidth(area.width())
+        self.move(QPoint(area.left(), area.bottom() - self.height() - 4))
 
 
 class QuietStaticHandler(SimpleHTTPRequestHandler):
