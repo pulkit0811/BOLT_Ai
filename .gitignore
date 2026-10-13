@@ -12,8 +12,13 @@ bolt_ai.db
 *.db
 build/
 dist/
+node_modules/
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
 *.spec
 *.log
+models/
 .idea/
 .vscode/settings.json
 

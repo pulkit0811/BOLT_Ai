@@ -11,7 +11,7 @@ class MessageComposer(QPlainTextEdit):
     def __init__(self) -> None:
         super().__init__()
         self.setObjectName("composer")
-        self.setPlaceholderText("Message Bolt AI… (Enter to send, Shift+Enter for a new line)")
+        self.setPlaceholderText("Write what you are thinking...")
         self.setFixedHeight(76)
         self.setTabChangesFocus(False)
 
@@ -23,4 +23,3 @@ class MessageComposer(QPlainTextEdit):
             self.send_requested.emit()
             return
         super().keyPressEvent(event)
-

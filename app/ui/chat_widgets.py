@@ -20,7 +20,7 @@ class MessageBubble(QFrame):
         layout.setSpacing(5)
 
         role_row = QHBoxLayout()
-        role = QLabel("You" if message.role == "user" else "Bolt AI")
+        role = QLabel("YOU" if message.role == "user" else "BOLT AI")
         role.setObjectName("messageRole")
         role_row.addWidget(role)
         role_row.addStretch()
@@ -40,14 +40,21 @@ class MessageBubble(QFrame):
 
 
 class SuggestionCard(QFrame):
-    def __init__(self, prompt: str) -> None:
+    def __init__(self, prompt: str, index: str) -> None:
         super().__init__()
         self.setObjectName("suggestion")
         self.setProperty("prompt", prompt)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 12, 14, 12)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(6, 12, 6, 12)
+        layout.setSpacing(14)
+        number = QLabel(index)
+        number.setObjectName("suggestionIndex")
+        layout.addWidget(number)
         label = QLabel(prompt)
+        label.setObjectName("suggestionText")
         label.setWordWrap(True)
-        label.setStyleSheet("color: #bed4ee;")
-        layout.addWidget(label)
+        layout.addWidget(label, 1)
+        arrow = QLabel(">")
+        arrow.setObjectName("suggestionArrow")
+        layout.addWidget(arrow)
 
