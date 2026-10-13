@@ -37,12 +37,14 @@ For the fastest repeatable Ollama demo, use the included PowerShell launcher aft
 .\run_bolt.ps1
 ```
 
-It uses `gemma4:cloud` by default. Override the model before launching when using another Ollama model:
+It uses `gemma4:cloud` by default and opens the Bolt workspace automatically. Override the model before launching when using another Ollama model:
 
 ```powershell
 $env:BOLT_MODEL = "gemma4:e2b"
 .\run_bolt.ps1
 ```
+
+Set `BOLT_OPEN_BROWSER=0` before launching when you want to open the workspace manually in another browser.
 
 Use the tray menu to reopen Bolt, preview the listening glow, toggle voice listening, or quit the launcher. The local Vosk engine waits for “Bolt”, shows the listening glow, transcribes the question, and submits it to the active conversation.
 
